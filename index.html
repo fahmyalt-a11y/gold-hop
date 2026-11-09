@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Gold Hop</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -19,16 +19,46 @@
         </div>
       </section>
 
+      <section id="device" class="overlay hidden">
+        <div class="panel">
+          <h2>PLAY ON</h2>
+          <p>Pick the device in your hands.</p>
+          <div class="choices">
+            <button id="pick-mobile" type="button">MOBILE</button>
+            <button id="pick-pc" type="button">PC</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="system" class="overlay hidden">
+        <div class="panel">
+          <h2 id="system-title">WHICH PHONE?</h2>
+          <div class="choices">
+            <button id="sys-a" type="button">iOS</button>
+            <button id="sys-b" type="button">ANDROID</button>
+          </div>
+        </div>
+      </section>
+
       <section id="how" class="overlay hidden">
         <div class="panel">
           <h2>CONTROLS</h2>
-          <ul class="keys">
-            <li><kbd>LEFT</kbd> <kbd>RIGHT</kbd> or <kbd>A</kbd> <kbd>D</kbd> move</li>
-            <li><kbd>SPACE</kbd> jump</li>
-          </ul>
+          <div id="how-pc">
+            <ul class="keys">
+              <li><kbd>LEFT</kbd> <kbd>RIGHT</kbd> or <kbd>A</kbd> <kbd>D</kbd> move</li>
+              <li><kbd>SPACE</kbd> jump</li>
+            </ul>
+          </div>
+          <div id="how-mobile" class="hidden">
+            <ul class="keys">
+              <li><kbd>◀</kbd> <kbd>▶</kbd> move</li>
+              <li><kbd>JUMP</kbd> hop</li>
+            </ul>
+            <p>The buttons sit under the game.</p>
+          </div>
           <p>Jump on monsters to squish them.</p>
           <p>Don't fall in the holes.</p>
-          <p>Hop on the gold block to finish.</p>
+          <p>Hop on the gold blocks to finish.</p>
           <p class="quiet">You get 3 lives.</p>
           <button id="start" type="button">START</button>
         </div>
@@ -37,33 +67,80 @@
       <section id="over" class="overlay hidden">
         <div class="panel">
           <h2>OUT OF LIVES</h2>
-          <p>The gold block is still waiting.</p>
+          <p>The gold blocks are still waiting.</p>
           <button id="retry" type="button">TRY AGAIN</button>
         </div>
       </section>
 
       <section id="hack" class="overlay hidden" role="dialog" aria-label="Copy">
-        <div class="mac-bar">
-          <span class="mac-menus"><b>Finder</b> File Edit View Go Window Help</span>
-          <span id="mac-clock" class="mac-clock"></span>
-        </div>
-        <div id="hack-window" class="finder">
-          <div class="finder-title">
-            <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
-            <span>Copy</span>
+        <div id="skin-ios" class="skin skin-ios hidden">
+          <div class="ios-status"><span class="tick">9:41</span><span>LTE</span></div>
+          <div class="ios-sheet">
+            <p class="ios-kicker">Files</p>
+            <p id="ios-file" class="ios-title">Preparing…</p>
+            <p id="ios-from" class="ios-sub">iPhone</p>
+            <div class="track"><span id="ios-bar"></span></div>
+            <p id="ios-meta" class="ios-meta">Calculating…</p>
           </div>
-          <div class="finder-body">
-            <div class="finder-icon" aria-hidden="true"></div>
-            <div class="finder-text">
-              <p id="hack-file">Preparing to copy…</p>
-              <p id="hack-from">Macintosh HD</p>
-              <div class="mac-progress" aria-hidden="true"><span id="hack-bar"></span></div>
-              <p id="hack-pct">Calculating…</p>
+        </div>
+
+        <div id="skin-android" class="skin skin-android hidden">
+          <div class="and-status"><span class="tick">9:41</span><span>5G</span></div>
+          <div class="and-card">
+            <p class="and-kicker">Files</p>
+            <p id="and-file" class="and-title">Preparing…</p>
+            <p id="and-from" class="and-sub">Internal storage</p>
+            <div class="track and-track"><span id="and-bar"></span></div>
+            <p id="and-meta" class="and-meta">Calculating…</p>
+          </div>
+        </div>
+
+        <div id="skin-win" class="skin skin-win hidden">
+          <div class="win-window">
+            <div class="win-bar"><span>Copying</span></div>
+            <div class="win-body">
+              <p id="win-file" class="win-title">Preparing…</p>
+              <p id="win-from" class="win-sub">This PC</p>
+              <div class="track win-track"><span id="win-bar"></span></div>
+              <p id="win-meta" class="win-meta">Calculating…</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="skin-mac" class="skin skin-mac hidden">
+          <div class="mac-menu">
+            <span><b>Finder</b> File Edit View Go Window Help</span>
+            <span class="tick">Sat 9:41 AM</span>
+          </div>
+          <div class="finder">
+            <div class="finder-title">
+              <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+              <span>Copy</span>
+            </div>
+            <div class="finder-body">
+              <div class="finder-icon" aria-hidden="true"></div>
+              <div>
+                <p id="mac-file" class="finder-name">Preparing to copy…</p>
+                <p id="mac-from" class="finder-sub">Macintosh HD</p>
+                <div class="track mac-track"><span id="mac-bar"></span></div>
+                <p id="mac-meta" class="finder-meta">Calculating…</p>
+              </div>
             </div>
           </div>
         </div>
       </section>
+
+      <section id="credits" class="overlay hidden">
+        <div id="reel" class="reel"></div>
+        <button id="again" class="hidden" type="button">PLAY AGAIN</button>
+      </section>
     </main>
+
+    <div id="pad" class="pad" hidden>
+      <button id="btn-left" type="button" aria-label="Move left">◀</button>
+      <button id="btn-right" type="button" aria-label="Move right">▶</button>
+      <button id="btn-jump" type="button">JUMP</button>
+    </div>
     <script src="game.js"></script>
   </body>
 </html>

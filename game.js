@@ -6,13 +6,13 @@ const JUMP_V = -6.85;
 const MOVE = 1.75;
 const MAX_FALL = 7.2;
 
-const params = new URLSearchParams(location.search);
-const FAST = params.has("fast") ? 0.22 : 1;
-
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const stage = document.getElementById("stage");
-const panels = ["menu", "how", "over", "hack"].map((id) => document.getElementById(id));
+const pad = document.getElementById("pad");
+const panels = ["menu", "device", "system", "how", "over", "hack", "credits"].map((id) =>
+  document.getElementById(id)
+);
 
 ctx.imageSmoothingEnabled = false;
 
@@ -36,6 +36,7 @@ const player = {
 let enemies = [];
 let spawn = { x: playerStart.x, y: playerStart.y };
 let lives = 3;
+let stomps = 0;
 let passedCheckpoint = false;
 let state = "menu";
 let onGround = true;
@@ -51,28 +52,76 @@ let clearTimer = 0;
 let particles = [];
 let anim = 0;
 let hackT0 = 0;
-let hackBuilt = null;
 let hackDone = false;
-let hackAlarm = 0;
+let creditTimer = 0;
 let audioCtx = null;
+const rig = { device: "pc", system: "mac" };
 
 const goldSpan = findGoldSpan();
 const keys = new Set();
-
 const clouds = Array.from({ length: 7 }, (_, i) => ({
   x: 30 + i * 250,
   y: 18 + (i % 3) * 26,
   w: 36 + (i % 3) * 14,
 }));
 
+const PACKS = {
+  ios: [
+    ["Photos", "IMG_1842.HEIC", 3.4],
+    ["Photos", "IMG_1843.HEIC", 2.8],
+    ["Files", "Notes.txt", 0.02],
+    ["Downloads", "scan.pdf", 0.7],
+    ["Photos", "IMG_1900.HEIC", 3.6],
+    ["Voice Memos", "Recording.m4a", 1.2],
+    ["Files", "Receipt.pdf", 0.4],
+    ["Photos", "IMG_2201.JPG", 4.9],
+  ],
+  android: [
+    ["DCIM/Camera", "IMG_1842.jpg", 3.4],
+    ["DCIM/Camera", "IMG_1843.jpg", 2.8],
+    ["Download", "scan.pdf", 0.7],
+    ["Documents", "Notes.txt", 0.02],
+    ["Movies", "clip.mp4", 36],
+    ["Music", "recording.m4a", 1.2],
+    ["Download", "export.zip", 22],
+    ["DCIM/Camera", "IMG_1900.jpg", 3.6],
+  ],
+  win: [
+    ["Pictures", "IMG_1842.jpg", 3.4],
+    ["Pictures", "IMG_1843.jpg", 2.8],
+    ["Desktop", "Screenshot.png", 1.6],
+    ["Documents", "Notes.txt", 0.02],
+    ["Downloads", "scan.pdf", 0.7],
+    ["Videos", "clip.mp4", 36],
+    ["Music", "recording.m4a", 1.2],
+    ["Documents", "Receipt.pdf", 0.4],
+  ],
+  mac: [
+    ["~/Pictures", "IMG_1842.HEIC", 3.4],
+    ["~/Pictures", "IMG_1843.HEIC", 2.8],
+    ["~/Desktop", "Screen Shot.png", 1.6],
+    ["~/Documents", "Notes.txt", 0.02],
+    ["~/Downloads", "IMG_2201.JPG", 4.9],
+    ["~/Movies", "clip.mov", 36],
+    ["~/Music", "Voice Memo.m4a", 1.2],
+    ["~/Documents", "Receipt.pdf", 0.4],
+  ],
+};
+
 resetLevel();
 showOnly("menu");
 requestAnimationFrame(loop);
+bindPad();
 
 document.getElementById("play").addEventListener("click", () => {
   unlockAudio();
-  openHow();
+  state = "device";
+  showOnly("device");
 });
+document.getElementById("pick-mobile").addEventListener("click", () => chooseDevice("mobile"));
+document.getElementById("pick-pc").addEventListener("click", () => chooseDevice("pc"));
+document.getElementById("sys-a").addEventListener("click", () => chooseSystem(document.getElementById("sys-a").dataset.system));
+document.getElementById("sys-b").addEventListener("click", () => chooseSystem(document.getElementById("sys-b").dataset.system));
 document.getElementById("start").addEventListener("click", () => {
   unlockAudio();
   begin();
@@ -82,18 +131,26 @@ document.getElementById("retry").addEventListener("click", () => {
   resetLevel();
   begin();
 });
+document.getElementById("again").addEventListener("click", () => {
+  document.title = "Gold Hop";
+  document.body.classList.remove("use-pad");
+  pad.hidden = true;
+  resetLevel();
+  state = "menu";
+  showOnly("menu");
+});
+
 window.addEventListener("keydown", (e) => {
   const code = e.code;
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space", "KeyA", "KeyD", "KeyW"].includes(code)) {
-    e.preventDefault();
-  }
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space", "KeyA", "KeyD", "KeyW"].includes(code)) e.preventDefault();
   if (state === "how" && (code === "Enter" || code === "Space")) {
     e.preventDefault();
     begin();
     return;
   }
   if (state === "menu" && code === "Enter") {
-    openHow();
+    state = "device";
+    showOnly("device");
     return;
   }
   if (state !== "play") return;
@@ -101,9 +158,63 @@ window.addEventListener("keydown", (e) => {
   keys.add(code);
   if (!e.repeat && (code === "Space" || code === "ArrowUp" || code === "KeyW")) jumpQueued = true;
 });
-
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
+
+function bindPad() {
+  hold(document.getElementById("btn-left"), "ArrowLeft", false);
+  hold(document.getElementById("btn-right"), "ArrowRight", false);
+  hold(document.getElementById("btn-jump"), "Space", true);
+}
+
+function hold(el, code, isJump) {
+  const press = (e) => {
+    e.preventDefault();
+    if (state !== "play") return;
+    el.setPointerCapture(e.pointerId);
+    keys.add(code);
+    if (isJump) jumpQueued = true;
+  };
+  const release = (e) => {
+    e.preventDefault();
+    keys.delete(code);
+  };
+  el.addEventListener("pointerdown", press);
+  el.addEventListener("pointerup", release);
+  el.addEventListener("pointercancel", release);
+}
+
+function chooseDevice(device) {
+  rig.device = device;
+  const title = document.getElementById("system-title");
+  const a = document.getElementById("sys-a");
+  const b = document.getElementById("sys-b");
+  if (device === "mobile") {
+    title.textContent = "WHICH PHONE?";
+    a.textContent = "iOS";
+    b.textContent = "ANDROID";
+    a.dataset.system = "ios";
+    b.dataset.system = "android";
+  } else {
+    title.textContent = "WHICH COMPUTER?";
+    a.textContent = "WINDOWS";
+    b.textContent = "macOS";
+    a.dataset.system = "win";
+    b.dataset.system = "mac";
+  }
+  state = "system";
+  showOnly("system");
+}
+
+function chooseSystem(system) {
+  rig.system = system;
+  const mobile = rig.device === "mobile";
+  document.getElementById("how-pc").classList.toggle("hidden", mobile);
+  document.getElementById("how-mobile").classList.toggle("hidden", !mobile);
+  document.body.classList.toggle("use-pad", mobile);
+  state = "how";
+  showOnly("how");
+}
 
 function createWorld() {
   const W = 100;
@@ -116,29 +227,23 @@ function createWorld() {
       }
     }
   };
-
   put(0, 13, W, 5, "#");
   put(22, 13, 3, 5, ".");
   put(40, 13, 3, 5, ".");
   put(60, 13, 3, 5, ".");
   put(80, 13, 2, 5, ".");
   put(93, 13, 7, 5, ".");
-
   put(33, 12, 2, 1, "#");
   put(54, 12, 2, 1, "^");
-
   put(20, 10, 6, 1, "=");
   put(38, 9, 7, 1, "=");
   put(58, 10, 7, 1, "=");
-
   put(84, 12, 8, 1, "G");
-
   map[12][4] = "P";
   map[12][12] = "M";
   map[12][47] = "M";
   map[12][70] = "M";
   map[12][44] = "C";
-
   return { map, w: W, h: H };
 }
 
@@ -147,17 +252,13 @@ function extractMarkers() {
     for (let x = 0; x < world.w; x++) {
       const t = world.map[y][x];
       if (t !== "P" && t !== "M" && t !== "C") continue;
-      const spot = {
-        x: x * TILE + 1,
-        y: (y + 1) * TILE - (t === "M" ? 12 : 14),
-      };
       if (t === "P") {
         playerStart.x = x * TILE + 2;
         playerStart.y = (y + 1) * TILE - 14;
       } else if (t === "M") {
         monsterSpawns.push({ x: x * TILE + 1, y: (y + 1) * TILE - 12 });
       } else {
-        checkpoint = spot;
+        checkpoint = { x: x * TILE + 2, y: (y + 1) * TILE - 14 };
       }
       world.map[y][x] = ".";
     }
@@ -202,6 +303,7 @@ function resetLevel() {
   player.prevBottom = player.y + player.h;
   spawn = { x: playerStart.x, y: playerStart.y };
   lives = 3;
+  stomps = 0;
   passedCheckpoint = false;
   onGround = true;
   coyote = 12;
@@ -211,14 +313,10 @@ function resetLevel() {
   hintTime = 0;
   particles = [];
   shake = 0;
+  hackDone = false;
+  creditTimer = 0;
   keys.clear();
   snapCamera();
-}
-
-function openHow() {
-  resetLevel();
-  state = "how";
-  showOnly("how");
 }
 
 function begin() {
@@ -226,6 +324,7 @@ function begin() {
   state = "play";
   hintTime = 280;
   showNone();
+  pad.hidden = rig.device !== "mobile";
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
@@ -239,9 +338,8 @@ function showNone() {
 
 function loop(now) {
   if (!loop.last) loop.last = now;
-  let acc = Math.min(80, now - loop.last);
+  loop.bank = (loop.bank || 0) + Math.min(80, now - loop.last);
   loop.last = now;
-  loop.bank = (loop.bank || 0) + acc;
   while (loop.bank >= 1000 / 60) {
     updateSim();
     loop.bank -= 1000 / 60;
@@ -252,14 +350,15 @@ function loop(now) {
 }
 
 function updateSim() {
-  if (state === "menu") {
-    attract += 1;
-    moveEnemies();
-    const max = Math.max(0, world.w * TILE - VIEW_W);
-    camX = (Math.sin(attract * 0.008) * 0.5 + 0.5) * max;
+  if (state === "menu" || state === "device" || state === "system" || state === "how") {
+    if (state === "menu") {
+      attract += 1;
+      moveEnemies();
+      const max = Math.max(0, world.w * TILE - VIEW_W);
+      camX = (Math.sin(attract * 0.008) * 0.5 + 0.5) * max;
+    }
     return;
   }
-
   if (state === "clear") {
     clearTimer -= 1;
     updateParticles();
@@ -267,7 +366,6 @@ function updateSim() {
     if (clearTimer <= 0) startHack();
     return;
   }
-
   if (state !== "play") return;
 
   anim += Math.abs(player.vx) > 0 ? 0.18 : 0;
@@ -293,15 +391,12 @@ function updateSim() {
     jumpBuffer = 0;
     onGround = false;
     beep(620, 0.07, "square", 0.04);
-  } else if (jumpBuffer > 0) {
-    jumpBuffer -= 1;
-  }
+  } else if (jumpBuffer > 0) jumpBuffer -= 1;
 
   player.landedVy = 0;
   player.prevBottom = player.y + player.h;
   player.x += player.vx;
   resolveX();
-
   player.vy = Math.min(MAX_FALL, player.vy + GRAV);
   player.y += player.vy;
   const hitGold = resolveY();
@@ -310,18 +405,15 @@ function updateSim() {
     passedCheckpoint = true;
     spawn = { x: checkpoint.x, y: checkpoint.y };
   }
-
   if (hitGold) {
     triggerWin();
     return;
   }
-
   moveEnemies();
   collideEnemies();
   if (state !== "play") return;
   if (feetTouchSpike()) loseLife(false);
   if (player.y > world.h * TILE) loseLife(true);
-
   updateParticles();
   followCamera();
   if (shake > 0) shake *= 0.86;
@@ -439,6 +531,7 @@ function collideEnemies() {
     if (fromAbove) {
       e.alive = false;
       e.squish = 18;
+      stomps += 1;
       player.vy = -4.4;
       player.y = e.y - player.h;
       player.landedVy = 0;
@@ -470,6 +563,7 @@ function loseLife(respawn) {
   beep(150, 0.16, "square", 0.05);
   if (lives <= 0) {
     state = "over";
+    pad.hidden = true;
     showOnly("over");
     keys.clear();
     return;
@@ -490,17 +584,16 @@ function loseLife(respawn) {
 function triggerWin() {
   if (state !== "play") return;
   state = "clear";
-  clearTimer = 10;
+  clearTimer = 12;
   player.vx = 0;
   player.vy = 0;
-  shake = 0;
   keys.clear();
+  pad.hidden = true;
 }
 
 function followCamera() {
   const max = Math.max(0, world.w * TILE - VIEW_W);
-  const target = clamp(player.x + player.w / 2 - VIEW_W * 0.36, 0, max);
-  camX += (target - camX) * 0.16;
+  camX += (clamp(player.x + player.w / 2 - VIEW_W * 0.36, 0, max) - camX) * 0.16;
 }
 
 function snapCamera() {
@@ -543,17 +636,12 @@ function draw(now) {
   const dx = shake > 0.4 ? (Math.random() * 2 - 1) * shake : 0;
   const dy = shake > 0.4 ? (Math.random() * 2 - 1) * shake : 0;
   const cam = Math.round(camX + dx);
-
-  ctx.fillStyle = "#79c6ff";
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   const sky = ctx.createLinearGradient(0, 0, 0, VIEW_H);
   sky.addColorStop(0, "#6eb6ff");
   sky.addColorStop(1, "#d8f4ff");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-
   drawSun();
-
   drawHills(cam, "#8dce78", 0.35, 150, 16);
   drawHills(cam, "#63b85a", 0.55, 176, 12);
   drawClouds(cam);
@@ -568,53 +656,49 @@ function draw(now) {
       if (t === "." && ty >= 13) {
         ctx.fillStyle = "#241833";
         ctx.fillRect(x, y, TILE, TILE);
-      } else if (t === "#") {
-        drawBrick(x, y, tileAt(tx, ty - 1));
-      } else if (t === "=") {
-        drawPlank(x, y);
-      } else if (t === "G") {
-        drawGold(x, y, now / 16 + tx);
-      } else if (t === "^") {
-        drawSpike(x, y);
-      }
+      } else if (t === "#") drawBrick(x, y, tileAt(tx, ty - 1));
+      else if (t === "=") drawPlank(x, y);
+      else if (t === "G") drawGold(x, y, now / 16 + tx);
+      else if (t === "^") drawSpike(x, y);
     }
   }
-
   if (checkpoint) drawSign(checkpoint.x - cam, checkpoint.y - dy);
-
   for (const p of particles) {
     ctx.globalAlpha = Math.max(0, p.life / 20);
     ctx.fillStyle = p.color;
     ctx.fillRect(Math.round(p.x - cam), Math.round(p.y - dy), 3, 3);
   }
   ctx.globalAlpha = 1;
-
   for (const e of enemies) {
     if (!e.alive && e.squish <= 0) continue;
     drawSlime(e, cam, dy);
   }
-
   const showPlayer = iframe <= 0 || Math.floor(iframe / 4) % 2 === 0;
-  if (showPlayer && state !== "hack") {
-    const bob = state === "clear" ? Math.sin(now / 70) * 3 : 0;
-    drawHero(player.x - cam, player.y - dy - bob, player.face, Math.floor(anim) % 2 === 0);
+  if (showPlayer && state !== "hack" && state !== "credits") {
+    drawHero(player.x - cam, player.y - dy, player.face, Math.floor(anim) % 2 === 0);
   }
-
   if (goldSpan.max >= 0) {
     const gx = ((goldSpan.min + goldSpan.max + 1) / 2) * TILE - cam;
-    const gy = goldSpan.row * TILE - 8 - dy;
     ctx.fillStyle = "#3a2500";
     ctx.font = "bold 12px Courier New";
     ctx.textAlign = "center";
-    ctx.fillText("FINISH", Math.round(gx), Math.round(gy));
+    ctx.fillText("FINISH", Math.round(gx), goldSpan.row * TILE - 8 - dy);
   }
-
   drawHud();
+}
 
-  if (state === "clear") {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  }
+function drawSun() {
+  const x = 400;
+  const y = 14;
+  ctx.fillStyle = "#ffe38a";
+  ctx.fillRect(x + 10, y, 4, 6);
+  ctx.fillRect(x + 10, y + 32, 4, 6);
+  ctx.fillRect(x - 8, y + 16, 6, 4);
+  ctx.fillRect(x + 28, y + 16, 6, 4);
+  ctx.fillStyle = "#ffd23a";
+  ctx.fillRect(x + 4, y + 10, 20, 20);
+  ctx.fillStyle = "#fff6c4";
+  ctx.fillRect(x + 10, y + 16, 8, 8);
 }
 
 function drawHills(cam, color, parallax, base, amp) {
@@ -643,13 +727,9 @@ function drawBrick(x, y, above) {
   ctx.fillStyle = "#c46a3c";
   ctx.fillRect(x + 1, y + 1, 6, 5);
   ctx.fillRect(x + 9, y + 8, 6, 5);
-  ctx.fillStyle = "#6d3518";
-  ctx.fillRect(x, y + 7, TILE, 1);
   if (surface) {
     ctx.fillStyle = "#3fa843";
     ctx.fillRect(x, y, TILE, 4);
-    ctx.fillStyle = "#2d7c34";
-    ctx.fillRect(x, y + 4, TILE, 2);
     ctx.fillStyle = "#8fe07a";
     ctx.fillRect(x + 2, y + 1, 4, 2);
   }
@@ -660,9 +740,6 @@ function drawPlank(x, y) {
   ctx.fillRect(x, y, TILE, 6);
   ctx.fillStyle = "#e0a86a";
   ctx.fillRect(x, y, TILE, 2);
-  ctx.fillStyle = "#5c3918";
-  ctx.fillRect(x + 4, y + 2, 2, 4);
-  ctx.fillRect(x + 11, y + 2, 2, 4);
 }
 
 function drawGold(x, y, t) {
@@ -671,8 +748,6 @@ function drawGold(x, y, t) {
   ctx.fillRect(x, y, TILE, TILE);
   ctx.fillStyle = blink ? "#ffe56a" : "#ffc83d";
   ctx.fillRect(x + 1, y + 1, 14, 14);
-  ctx.fillStyle = "#fff4b0";
-  ctx.fillRect(x + 2, y + 2, 5, 2);
   ctx.fillStyle = "#a35c00";
   ctx.fillRect(x + 7, y + 4, 2, 2);
   ctx.fillRect(x + 5, y + 6, 6, 2);
@@ -685,8 +760,6 @@ function drawSpike(x, y) {
   ctx.fillRect(x + 5, y + 5, 6, 3);
   ctx.fillRect(x + 3, y + 8, 10, 3);
   ctx.fillRect(x + 2, y + 11, 12, 5);
-  ctx.fillStyle = "#9aa3b2";
-  ctx.fillRect(x + 8, y + 5, 2, 8);
 }
 
 function drawSign(x, y) {
@@ -696,8 +769,6 @@ function drawSign(x, y) {
   ctx.fillRect(sx + 4, sy - 22, 3, 22);
   ctx.fillStyle = passedCheckpoint ? "#ffd23a" : "#f4f4f4";
   ctx.fillRect(sx + 7, sy - 22, 14, 9);
-  ctx.fillStyle = "#333";
-  ctx.fillRect(sx + 9, sy - 19, 9, 2);
 }
 
 function drawSlime(e, cam, dy) {
@@ -706,17 +777,10 @@ function drawSlime(e, cam, dy) {
   const h = flat ? 4 : e.h;
   const x = Math.round(e.x - cam);
   const y = Math.round(e.y - dy + (flat ? e.h - 4 : bob));
-  ctx.fillStyle = "rgba(0,0,0,0.2)";
-  ctx.fillRect(x + 2, Math.round(e.y + e.h - dy), e.w - 4, 2);
   ctx.fillStyle = flat ? "#6a4cb8" : "#6d42e0";
-  ctx.fillRect(x + 1, y + 4, e.w - 2, h - 3);
+  ctx.fillRect(x + 1, y + 4, e.w - 2, Math.max(2, h - 3));
   ctx.fillRect(x + 3, y + 2, e.w - 6, 4);
-  ctx.fillStyle = "#b79bff";
-  ctx.fillRect(x + 3, y + 4, 4, 2);
   if (!flat) {
-    ctx.fillStyle = "#2a1848";
-    ctx.fillRect(x + 3, y + 5, 3, 1);
-    ctx.fillRect(x + 8, y + 5, 3, 1);
     ctx.fillStyle = "#fff";
     ctx.fillRect(x + 3, y + 6, 3, 3);
     ctx.fillRect(x + 8, y + 6, 3, 3);
@@ -731,8 +795,6 @@ function drawHero(px, py, face, step) {
   const x = Math.round(px);
   const y = Math.round(py);
   const dir = face >= 0 ? 1 : -1;
-  ctx.fillStyle = "rgba(0,0,0,0.22)";
-  ctx.fillRect(x + 1, y + 13, 10, 2);
   ctx.fillStyle = "#2a3358";
   ctx.fillRect(x + 2, y + 9, 3, step ? 4 : 5);
   ctx.fillRect(x + 7, y + 9, 3, step ? 5 : 4);
@@ -746,27 +808,8 @@ function drawHero(px, py, face, step) {
   ctx.fillRect(x + 3, y, 6, 6);
   ctx.fillStyle = "#5a3318";
   ctx.fillRect(x + 3, y - 2, 6, 3);
-  ctx.fillRect(x + (dir > 0 ? 3 : 7), y, 2, 3);
   ctx.fillStyle = "#1b1b1b";
   ctx.fillRect(x + (dir > 0 ? 7 : 4), y + 2, 1, 2);
-}
-
-function drawSun() {
-  const x = 400;
-  const y = 14;
-  ctx.fillStyle = "#ffe38a";
-  ctx.fillRect(x + 10, y, 4, 6);
-  ctx.fillRect(x + 10, y + 32, 4, 6);
-  ctx.fillRect(x - 8, y + 16, 6, 4);
-  ctx.fillRect(x + 28, y + 16, 6, 4);
-  ctx.fillRect(x - 2, y + 4, 5, 5);
-  ctx.fillRect(x + 21, y + 4, 5, 5);
-  ctx.fillRect(x - 2, y + 27, 5, 5);
-  ctx.fillRect(x + 21, y + 27, 5, 5);
-  ctx.fillStyle = "#ffd23a";
-  ctx.fillRect(x + 4, y + 10, 20, 20);
-  ctx.fillStyle = "#fff6c4";
-  ctx.fillRect(x + 10, y + 16, 8, 8);
 }
 
 function drawHud() {
@@ -781,7 +824,8 @@ function drawHud() {
     ctx.fillStyle = "#fff6d8";
     ctx.font = "12px Courier New";
     ctx.textAlign = "center";
-    ctx.fillText("ARROWS move   SPACE jump   stomp", 218, 21);
+    const hint = rig.device === "mobile" ? "BUTTONS move and jump    stomp" : "ARROWS move   SPACE jump   stomp";
+    ctx.fillText(hint, 218, 21);
     ctx.restore();
   }
 }
@@ -796,85 +840,123 @@ function drawHeart(x, y, filled) {
   ctx.fillRect(x + 5, y + 10, 2, 2);
 }
 
-const MAC_FILES = [
-  ["~/Pictures", "IMG_1842.HEIC", 3.4],
-  ["~/Pictures", "IMG_1843.HEIC", 2.8],
-  ["~/Desktop", "Screen Shot 2026-11-07 at 4.12.22\u202fPM.png", 1.6],
-  ["~/Documents", "Notes.txt", 0.02],
-  ["~/Downloads", "IMG_2201.JPG", 4.9],
-  ["~/Movies", "clip.mov", 36],
-  ["~/Music", "Voice Memo.m4a", 1.2],
-  ["~/Documents", "scan.pdf", 0.7],
-  ["~/Desktop", "Untitled folder", 14],
-  ["~/Pictures", "IMG_1900.HEIC", 3.6],
-  ["~/Downloads", "export.zip", 22],
-  ["~/Documents", "Receipt.pdf", 0.4],
-];
-
-function macClock() {
-  const d = new Date();
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  let h = d.getHours();
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const ap = h >= 12 ? "PM" : "AM";
-  h = h % 12 || 12;
-  return days[d.getDay()] + " " + h + ":" + min + " " + ap;
-}
-
 function formatMB(n) {
   if (n < 0.1) return Math.max(1, Math.round(n * 1024)) + " KB";
   if (n >= 10) return Math.round(n) + " MB";
   return n.toFixed(1) + " MB";
 }
 
+function clockText() {
+  const d = new Date();
+  let h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return h + ":" + min + (rig.system === "mac" ? " " + ap : "");
+}
+
 function startHack() {
-  const total = MAC_FILES.reduce((sum, file) => sum + file[2], 0);
-  hackBuilt = { files: MAC_FILES, total };
   hackT0 = performance.now();
   hackDone = false;
+  creditTimer = 0;
   document.title = "Copy";
-  document.getElementById("mac-clock").textContent = macClock();
-  document.getElementById("hack-file").textContent = "Preparing to copy…";
-  document.getElementById("hack-from").textContent = "Macintosh HD";
-  document.getElementById("hack-bar").style.width = "0%";
-  document.getElementById("hack-pct").textContent = "Calculating time remaining…";
+  const hack = document.getElementById("hack");
+  hack.className = "overlay os-" + rig.system;
+  for (const id of ["ios", "android", "win", "mac"]) {
+    document.getElementById("skin-" + id).classList.toggle("hidden", id !== rig.system);
+  }
+  paintCopy(0);
   showOnly("hack");
   state = "hack";
-  if (hackAlarm) clearInterval(hackAlarm);
-  hackAlarm = setInterval(() => {
-    const clock = document.getElementById("mac-clock");
-    if (clock) clock.textContent = macClock();
-  }, 1000);
+  pad.hidden = true;
+}
+
+function paintCopy(shown) {
+  const files = PACKS[rig.system];
+  const total = files.reduce((sum, file) => sum + file[2], 0);
+  const copied = files.slice(0, shown).reduce((sum, file) => sum + file[2], 0);
+  const pct = shown === 0 ? 6 : Math.min(100, Math.round((copied / total) * 100));
+  const current = shown === 0 ? null : files[Math.min(shown, files.length) - 1];
+  const prefix = rig.system === "win" ? "win" : rig.system === "mac" ? "mac" : rig.system === "ios" ? "ios" : "and";
+  const fileEl = document.getElementById(prefix + "-file");
+  const fromEl = document.getElementById(prefix + "-from");
+  const barEl = document.getElementById(prefix + "-bar");
+  const metaEl = document.getElementById(prefix + "-meta");
+  if (!current) {
+    fileEl.textContent = rig.system === "mac" ? "Preparing to copy…" : "Preparing…";
+    fromEl.textContent = rig.system === "android" ? "Internal storage" : rig.system === "win" ? "This PC" : rig.system === "mac" ? "Macintosh HD" : "iPhone";
+    metaEl.textContent = "Calculating…";
+  } else if (shown >= files.length) {
+    fileEl.textContent = rig.system === "ios" || rig.system === "mac" ? "Copying \u201C" + current[1] + "\u201D" : current[1];
+    fromEl.textContent = placeLine(current[0]);
+    metaEl.textContent = formatMB(total) + " of " + formatMB(total);
+  } else {
+    fileEl.textContent = rig.system === "ios" || rig.system === "mac" ? "Copying \u201C" + current[1] + "\u201D" : current[1];
+    fromEl.textContent = placeLine(current[0]);
+    const left = Math.max(1, files.length - shown);
+    metaEl.textContent = formatMB(copied) + " of " + formatMB(total) + " \u2014 " + left + " left";
+  }
+  barEl.style.width = (shown >= files.length ? 100 : pct) + "%";
+  document.querySelectorAll(".tick").forEach((el) => {
+    el.textContent = clockText();
+  });
+}
+
+function placeLine(folder) {
+  if (rig.system === "ios") return "From " + folder;
+  if (rig.system === "android") return "/storage/emulated/0/" + folder;
+  if (rig.system === "win") return "This PC  \\  " + folder;
+  return "to " + folder;
 }
 
 function updateHack(now) {
-  if (!hackBuilt || hackDone) return;
-  const t = now - hackT0;
-  const step = 700 * FAST;
-  const shown = Math.max(0, Math.min(hackBuilt.files.length, Math.floor(t / step)));
-  const copied = hackBuilt.files.slice(0, shown).reduce((sum, file) => sum + file[2], 0);
-  const pct = Math.max(2, Math.min(100, Math.round((copied / hackBuilt.total) * 100)));
-  const left = Math.max(1, Math.ceil(((hackBuilt.files.length - shown) * step) / 1000));
-  document.getElementById("hack-bar").style.width = (shown === 0 ? 4 : pct) + "%";
-  if (shown === 0) {
-    document.getElementById("hack-file").textContent = "Preparing to copy…";
-    document.getElementById("hack-from").textContent = "Macintosh HD";
-    document.getElementById("hack-pct").textContent = "Calculating time remaining…";
-    return;
-  }
-  const current = hackBuilt.files[Math.min(shown, hackBuilt.files.length) - 1];
-  document.getElementById("hack-file").textContent = "Copying \u201C" + current[1] + "\u201D";
-  document.getElementById("hack-from").textContent = "to " + current[0];
-  document.getElementById("hack-pct").textContent =
-    formatMB(copied) + " of " + formatMB(hackBuilt.total) + " \u2014 About " + left + " seconds";
-
-  if (shown >= hackBuilt.files.length) {
+  const files = PACKS[rig.system];
+  const step = 650;
+  const shown = Math.max(0, Math.min(files.length, Math.floor((now - hackT0) / step)));
+  if (!hackDone) paintCopy(shown);
+  if (!hackDone && shown >= files.length && now - hackT0 > files.length * step + 900) {
     hackDone = true;
-    document.getElementById("hack-bar").style.width = "100%";
-    document.getElementById("hack-file").textContent = "Copying \u201C" + current[1] + "\u201D";
-    document.getElementById("hack-from").textContent = "to " + current[0];
-    document.getElementById("hack-pct").textContent = formatMB(hackBuilt.total) + " of " + formatMB(hackBuilt.total);
+    paintCopy(files.length);
+    creditTimer = now;
   }
+  if (hackDone && now - creditTimer > 1400) showCredits();
+}
+
+function showCredits() {
+  if (state === "credits") return;
+  state = "credits";
+  document.title = "Gold Hop";
+  const names = {
+    ios: "iPhone",
+    android: "Android",
+    win: "Windows",
+    mac: "Mac",
+  };
+  const reel = document.getElementById("reel");
+  reel.innerHTML = [
+    "<h2>GOLD HOP</h2>",
+    line("Monsters squished", String(stomps)),
+    line("Lives remaining", String(Math.max(0, lives))),
+    line("Played on", names[rig.system]),
+    "<p class='role'>DIRECTED BY</p><p class='name'>FAHMY FARUG</p>",
+    "<p class='role'>CO-DIRECTOR</p><p class='name'>CURSOR AI</p>",
+  ].join("");
+  reel.style.transition = "none";
+  reel.style.transform = "translateY(0)";
+  document.getElementById("again").classList.add("hidden");
+  showOnly("credits");
+  requestAnimationFrame(() => {
+    reel.style.transition = "transform 12s linear";
+    reel.style.transform = "translateY(calc(-100% - 6vh))";
+  });
+  setTimeout(() => {
+    if (state !== "credits") return;
+    document.getElementById("again").classList.remove("hidden");
+  }, 12000);
+}
+
+function line(role, value) {
+  return "<p class='role'>" + role.toUpperCase() + "</p><p class='stat'>" + value + "</p>";
 }
 
 function unlockAudio() {
