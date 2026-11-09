@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gold Hop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="stage">
+      <canvas id="c" width="480" height="270" aria-hidden="true"></canvas>
+
+      <section id="menu" class="overlay">
+        <div class="panel">
+          <p class="eyebrow">A tiny retro run</p>
+          <h1>GOLD HOP</h1>
+          <p class="blurb">Jump the gaps. Squish the monsters. Reach the gold.</p>
+          <button id="play" type="button">PLAY</button>
+        </div>
+      </section>
+
+      <section id="how" class="overlay hidden">
+        <div class="panel">
+          <h2>CONTROLS</h2>
+          <ul class="keys">
+            <li><kbd>LEFT</kbd> <kbd>RIGHT</kbd> or <kbd>A</kbd> <kbd>D</kbd> move</li>
+            <li><kbd>SPACE</kbd> jump</li>
+          </ul>
+          <p>Jump on monsters to squish them.</p>
+          <p>Don't fall in the holes.</p>
+          <p>Hop on the gold block to finish.</p>
+          <p class="quiet">You get 3 lives.</p>
+          <button id="start" type="button">START</button>
+        </div>
+      </section>
+
+      <section id="over" class="overlay hidden">
+        <div class="panel">
+          <h2>OUT OF LIVES</h2>
+          <p>The gold block is still waiting.</p>
+          <button id="retry" type="button">TRY AGAIN</button>
+        </div>
+      </section>
+
+      <section id="hack" class="overlay hidden" role="dialog" aria-label="Copy">
+        <div class="mac-bar">
+          <span class="mac-menus"><b>Finder</b> File Edit View Go Window Help</span>
+          <span id="mac-clock" class="mac-clock"></span>
+        </div>
+        <div id="hack-window" class="finder">
+          <div class="finder-title">
+            <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span>Copy</span>
+          </div>
+          <div class="finder-body">
+            <div class="finder-icon" aria-hidden="true"></div>
+            <div class="finder-text">
+              <p id="hack-file">Preparing to copy…</p>
+              <p id="hack-from">Macintosh HD</p>
+              <div class="mac-progress" aria-hidden="true"><span id="hack-bar"></span></div>
+              <p id="hack-pct">Calculating…</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>
